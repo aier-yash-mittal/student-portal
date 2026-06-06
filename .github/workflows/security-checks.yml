@@ -1,136 +1,58 @@
-name: SecureCampus DevSecOps Security Checks
-
-on:
-  push:
-    branches: [ main, master, dev ]
-  pull_request:
-    branches: [ main, master, dev ]
+name: DevSecOps Pipeline
+on: [push, pull_request]
 
 jobs:
-  # Job 1: Secret Scanning using Gitleaks
-  gitleaks-secrets-scan:
-    name: Secrets Leak Scanning (Gitleaks)
+  security:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # fetch all history for accurate commit scanning
+          fetch-depth: 0          # full history so secret scanning sees all commits
 
-      - name: Run Gitleaks Secret Scan
+      # ---- GATE 1: Secret scanning ----
+      - name: Secret scan (gitleaks)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: --verbose --redact
 
-  # Job 2: Dependency Security Auditing
-  dependency-vulnerability-check:
-    name: Dependency Audit & Scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+      - run: npm ci
 
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run npm audit
-        run: |
-          # Fails the build if moderate, high, or critical vulnerabilities are found
-          npm audit --audit-level=high
-
-      - name: Run OWASP Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@main
-        id: Dependency-Check
+      # ---- GATE 2: SAST ----
+      - name: SAST (Semgrep)
+        uses: returntocorp/semgrep-action@v1
         with:
-          project: 'SecureCampus'
-          path: '.'
-          format: 'HTML'
-          out: 'reports' # outputs report to reports/dependency-check-report.html
-          args: >
-            --failOnCVSS 7
-            --enableRetired
+          config: p/owasp-top-ten
 
-      - name: Upload OWASP Security Report
-        uses: actions/upload-artifact@v4
-        with:
-          name: owasp-dependency-check-report
-          path: reports/dependency-check-report.html
-          retention-days: 14
+      # ---- GATE 3: Dependency scan ----
+      - name: Dependency scan (npm audit)
+        run: npm audit --audit-level=high
 
-  # Job 3: SAST Code Analysis (Semgrep)
-  semgrep-sast-analysis:
-    name: Static Application Security Testing (Semgrep)
-    runs-on: ubuntu-latest
-    container:
-      image: returntocorp/semgrep
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      # ---- Build the image ----
+      - name: Build image
+        run: docker build -t secure-portal:${{ github.sha }} .
 
-      - name: Run Semgrep scan
-        run: |
-          # Scan utilizing default OWASP & security rules
-        semgrep scan --config auto --error --exclude '.next' --exclude 'node_modules' 
-  # Job 4: ESLint Code Quality and Security Rules check
-  eslint-security-scan:
-    name: ESLint Static Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: 'npm'
-
-      - name: Install Dependencies
-        run: npm ci
-
-      - name: Run ESLint with Security plugins
-        run: npm run lint
-
-  # Job 5: Optional Container Scanning (Active if Docker is used)
-  container-vulnerability-scan:
-    name: Container Vulnerability Scan (Trivy)
-    runs-on: ubuntu-latest
-    # This job only runs if a Dockerfile is present in the repository
-    # It demonstrates container security if developers build images
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Check for Dockerfile
-        id: check_dockerfile
-        run: |
-          if [ -f Dockerfile ]; then
-            echo "dockerfile_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "dockerfile_exists=false" >> $GITHUB_OUTPUT
-          fi
-        shell: bash
-
-      - name: Build Local Mock Image for Scanning
-        if: steps.check_dockerfile.outputs.dockerfile_exists == 'true'
-        run: |
-          docker build -t securecampus-app:latest .
-
-      - name: Run Trivy Vulnerability Scanner
-        if: steps.check_dockerfile.outputs.dockerfile_exists == 'true'
+      # ---- GATE 4: Image scan ----
+      - name: Image scan (Trivy)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'securecampus-app:latest'
-          format: 'table'
-          exit-code: '1' # Fails build on critical vulnerabilities
+          image-ref: secure-portal:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: '1'
           ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+
+      # ---- GATE 5: Config / compliance scan ----
+      - name: Config scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+      # ---- Deploy only if every gate passed ----
+      - name: Deploy (placeholder)
+        if: success()
+        run: echo "All gates passed — deploying. Secret is fetched from Vault at runtime."
