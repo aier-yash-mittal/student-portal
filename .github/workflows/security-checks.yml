@@ -78,8 +78,7 @@ jobs:
       - name: Run Semgrep scan
         run: |
           # Scan utilizing default OWASP & security rules
-          semgrep scan --config auto --error --fail-on-severity ERROR --exclude '.next' --exclude 'node_modules'
-
+        semgrep scan --config auto --error --exclude '.next' --exclude 'node_modules' 
   # Job 4: ESLint Code Quality and Security Rules check
   eslint-security-scan:
     name: ESLint Static Security Audit
