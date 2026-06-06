@@ -1,13 +1,14 @@
 # Multi-stage Dockerfile for Next.js 15 SecureCampus Portal
-# 1. Install dependencies
-FROM node:20-alpine AS deps
-RUN apk add --no-cache libc6-compat
+# 1. Install dependencies and upgrade OS libraries to patch CVEs
+FROM node:20.14.0-alpine AS deps
+RUN apk update && apk upgrade --no-cache && apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
 # 2. Build the application
-FROM node:20-alpine AS builder
+FROM node:20.14.0-alpine AS builder
+RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -16,7 +17,8 @@ ENV NODE_ENV=production
 RUN npm run build
 
 # 3. Production runner
-FROM node:20-alpine AS runner
+FROM node:20.14.0-alpine AS runner
+RUN apk update && apk upgrade --no-cache
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -40,5 +42,9 @@ EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Container Healthcheck (Resolves Trivy Config Compliance Check flags)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => { if (r.statusCode !== 200) process.exit(1); })"
 
 CMD ["npm", "start"]
