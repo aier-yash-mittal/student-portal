@@ -2,11 +2,12 @@
 import { createServerClient as createSupabaseServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { MockSupabaseClient } from "./mock-client";
+import { isMockEnabled } from "./config";
 
 export async function createServerClient() {
   const cookieStore = await cookies();
 
-  if (process.env.NEXT_PUBLIC_USE_MOCK_PROVIDER === "true") {
+  if (isMockEnabled()) {
     return new MockSupabaseClient({ cookies: cookieStore }) as any;
   }
 

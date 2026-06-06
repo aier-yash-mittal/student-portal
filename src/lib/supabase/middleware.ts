@@ -1,6 +1,7 @@
 // Middleware cookie session refresher & route protector
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isMockEnabled } from "./config";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -20,7 +21,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Handle Mock Provider Session Protection
-  if (process.env.NEXT_PUBLIC_USE_MOCK_PROVIDER === "true") {
+  if (isMockEnabled()) {
     const sessionCookie = request.cookies.get("securecampus-session")?.value;
     
     // Redirect unauthenticated requests to login

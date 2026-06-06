@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { updateProfileAction } from "@/app/actions";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { profileUpdateSchema } from "@/lib/validations/schemas";
+import { isMockEnabled } from "@/lib/supabase/config";
 import {
   User,
   Phone,
@@ -73,7 +74,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
     setSuccess(null);
 
     try {
-      const isMock = process.env.NEXT_PUBLIC_USE_MOCK_PROVIDER === "true";
+      const isMock = isMockEnabled();
       
       if (isMock) {
         // Mock upload: read as Base64 Data URL and set immediately

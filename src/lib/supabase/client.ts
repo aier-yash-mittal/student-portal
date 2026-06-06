@@ -1,9 +1,10 @@
 // Client-side Supabase client factory
 import { createBrowserClient as createSupabaseBrowserClient } from "@supabase/ssr";
 import { MockSupabaseClient } from "./mock-client";
+import { isMockEnabled } from "./config";
 
 export function createBrowserClient() {
-  if (process.env.NEXT_PUBLIC_USE_MOCK_PROVIDER === "true") {
+  if (isMockEnabled()) {
     return new MockSupabaseClient() as any;
   }
   
